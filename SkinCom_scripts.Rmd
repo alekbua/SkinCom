@@ -1,0 +1,1034 @@
+---
+title: "skincom_scripts_alekbua"
+author: "Asama Lekbua"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+
+This is for making Figures 1B, 2D, 3A, 3B, 3G, 4 Figure 5E and Supp Fig 1, Supp Fig 3
+
+
+Load packages
+```{r}
+# install packages
+# install.packages("tidyr")
+# install.packages("dplyr")
+# install.packages("tidyverse")
+# install.packages("readr")
+
+
+# load packages
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(stringr)
+library(colorspace)
+library(RColorBrewer)
+library(magrittr)
+library(tidyverse)
+```
+
+
+Set up colorblind-friendly color palette
+https://www.datanovia.com/en/blog/ggplot-colors-best-tricks-you-will-love/
+```{r}
+# The palette with grey:
+cbp <- c("#999999", "#009E73", "#F0E442","#E69F00","#000000",
+          "#CC79A7","#0072B2", "#D55E00","#56B4E9" )
+```
+
+
+
+# Figure 1B
+Import and manage data
+```{r}
+g <- read.csv("/Users/data/growth_curve_both.csv", 
+header = TRUE, 
+sep = ",")
+
+# skip neg ctrl
+g <- g %>% filter(!grepl('BHI_neg_ctrl',Species))
+
+```
+
+Plot
+```{r, fig.height = 5, fig.width=14}
+gc <- ggplot(g, aes(x=Time, y=OD600, color=Condition)) +
+    labs(x = "Time (hr)") +
+    stat_summary(
+        fun = mean,
+        geom='line',
+        aes(color=Condition)) +
+    stat_summary(
+        fun=mean,
+        geom='point') +
+    stat_summary(
+        fun.data=mean_cl_boot,
+        geom='errorbar',
+        width=0.5) +
+    facet_wrap(~Species, nc = 5) +
+    theme_bw() +
+    scale_fill_manual(values=c("grey", "black"))
+
+# view
+gc
+```
+
+# Figure 2D
+Import and manage data
+```{r}
+# load count table
+count<-read.csv("/Users/data/bowtie2_reclass_counts_norm_organism.csv")
+
+# load metadata
+meta<-readr::read_tsv("/Users/data/Pilot1_metadata_phyloseq.tsv")
+
+# load dictionary
+dict<-read.csv("/Users/data/skincom_dictionary.csv")
+
+# rename first column
+names(count)[1] <- "Taxonomy"
+names(meta)[1] <- "Well"
+
+
+# make long form
+df <- pivot_longer(data = count, 
+                          cols = c(2:42), 
+                          names_to = "Well", 
+                          values_to = "RPKM")
+
+# Add species
+df <- merge(df, dict, by="Taxonomy", all.x = TRUE)
+colnames(df)
+
+# Add conditions
+df <- merge(df, meta, by="Well", all.x = TRUE)
+colnames(df)
+
+# filter to include normalized reads > 1
+p <- df %>% filter(df$RPKM > 1)
+
+# plot equal mix
+p <- p %>% filter(grepl('EM',Condition))
+
+```
+
+Plot
+```{r, fig.height = 5, fig.width=5}
+fig2d <- ggplot(p, aes(x = Media, y = RPKM, fill = Species)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.8) +
+  labs(y = "Relative abundance (RPKM)") +
+  theme(text = element_text(size = 33),
+        legend.text=element_text(size=33),
+        plot.title = element_text(
+          hjust = 0, 
+          size = 33, 
+          face="bold", 
+          margin=margin(10,0,10,0))) +
+  xlab(" ")+ 
+  theme(legend.position="right") +
+  theme_light() +
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+# view
+fig2d
+
+```
+
+Figures 3A, 3B, 3G
+Import and manage data
+```{r}
+# count table
+ct<-readr::read_tsv("/Users/data/invitro_skincom_JC_no_strat.tsv")
+
+# Import metadata from zebra package
+length <-read.delim("/Users/data/zebra_genome_length.tsv", sep=",")
+length$total_length <- as.double(length$total_length) 
+
+# bind tables
+ct <- merge(ct, length, by="Taxonomy", all.x = TRUE)
+
+# rename
+rpkm <- ct
+
+# set up function for RPKM normalization
+rpkm_fun <- function(x) x / ( (rpkm$total_length / 1000) * (sum(x) / 1000000) )
+rpkm[, 2:83] <- apply(rpkm[, 2:83], 2, rpkm_fun)
+
+# Import metadata for sample conditions
+name<-readr::read_tsv("/Users/data/Pilot1_metadata_phyloseq.tsv")
+name
+
+# rename columns
+names(name)[1] <- "Well"
+names(name)[2] <- "Ratio"
+names(name)[3] <- "Media"
+
+# combine columns
+name$Condition <- paste(name$Ratio, name$Media)
+
+# make long form
+dfl <- pivot_longer(data = rpkm, 
+                          cols = c(2:83), 
+                          names_to = "Well", 
+                          values_to = "RPKM")
+
+# chop off names after _L in "well"
+dfl$Well <- str_split(dfl$Well, "_L", simplify = TRUE)[,1]
+name$Well <- str_split(name$Well, "_L", simplify = TRUE)[,1]
+
+# view
+dfl
+name
+
+# merge
+dflm <- merge(dfl, name, by="Well", all.x = TRUE)
+dflm
+
+# upload table with droplets
+droplets <-readr::read_tsv("/Users/data/droplets.tsv")
+
+# make long form
+drl <- pivot_longer(data = droplets, 
+                          cols = c(2:6), 
+                          names_to = "conditions", 
+                          values_to = "droplets")
+
+# rename first column
+names(drl)[1] <- "Taxonomy"
+
+```
+
+Plot absolute counts
+```{r, fig.height = 3, fig.width=7}
+Fig3A <- ggplot(drl, aes(x = conditions, y = droplets, fill = Taxonomy)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  labs(y = "Absolute abundance") +
+  theme(text = element_text(size = 16),
+        legend.text=element_text(size=12),
+        plot.title = element_text(
+          hjust = 0, 
+          size = 20, 
+          face="bold", 
+          margin=margin(10,0,10,0))) +
+  xlab(" ")+ 
+  theme(legend.position="right") +
+  theme_light() +
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+# view
+Fig3A
+```
+
+Plot relative abundance
+```{r, fig.height = 3, fig.width=7}
+Fig3B<- ggplot(drl, aes(x = conditions, y = droplets, fill = Taxonomy)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.8) +
+  labs(y = "Relative abundance") +
+  theme(text = element_text(size = 16),
+        legend.text=element_text(size=12),
+        plot.title = element_text(
+          hjust = 0, 
+          size = 20, 
+          face="bold", 
+          margin=margin(10,0,10,0))) +
+  xlab(" ")+ 
+  theme(legend.position="right") +
+  theme_light() +
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+# view
+Fig3B
+```
+
+
+
+Plot Figure 3G
+```{r, fig.height = 3, fig.width=7}
+# filter to only include RPKM >1
+p <- dflm %>% filter(dflm$RPKM > 1)
+
+# exclude neg controls
+p <- p %>% filter(!grepl('NegControl_S48',Well))
+
+# plot
+Fig3G <- ggplot(p, aes(x = Ratio, y = RPKM, fill = Taxonomy)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.8) +
+  labs(y = "Relative abundance (RPKM)") +
+  facet_wrap(~Media, scales="free", nc=3) +
+  theme(text = element_text(size = 18),
+        legend.text=element_text(size=14),
+        plot.title = element_text(
+          hjust = 0, 
+          size = 20, 
+          face="bold", 
+          margin=margin(10,0,10,0))) +
+  xlab(" ")+ 
+  theme(legend.position="right") +
+  theme_light() +
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+# view
+Fig3G
+```
+
+
+Figure 4
+Import and manage data 
+```{r}
+# coverage
+cov <-readr::read_tsv("/Users/data/metaG_mouse_coverages.tsv")
+# metaG
+g <- read_csv("/Users/data/mouse_metaG.csv")
+# metaT
+t <- read_csv("/Users/data/mouse_metaT.csv")
+
+colnames(g)[2: (ncol(g))] <- str_replace(colnames(g)[2: (ncol(g))], "_S12", "")
+colnames(g)[2: (ncol(g))] <- str_replace(colnames(g)[2: (ncol(g))], "_S13", "")
+colnames(g)[2: (ncol(g))] <- str_replace(colnames(g)[2: (ncol(g))], "_S14", "")
+colnames(g)[2: (ncol(g))] <- str_replace(colnames(g)[2: (ncol(g))], "_S15", "")
+colnames(g)[2: (ncol(g))] <- str_replace(colnames(g)[2: (ncol(g))], "_S16", "")
+
+# remove "mouse"
+colnames(g)[2: (ncol(g))] <- str_replace(colnames(g)[2: (ncol(g))], "_mouse_", "_")
+colnames(t)[2: (ncol(t))] <- str_replace(colnames(t)[2: (ncol(t))], "_mouse_", "_")
+
+# split names
+cov <- cov %>% separate(strain, 
+                c("genus","species","strain"))
+
+# make Taxonomy column
+cov$Taxonomy <- paste(cov$genus, cov$species)
+
+# filter to coverage > 0.01
+cov2 <- cov %>% filter(cov$coverage_ratio > 0.01)
+
+
+# aggregate by taxonomy
+# metaG
+agg.g = aggregate(g[,3:7],
+                by = list(g$Taxonomy),
+                FUN = sum)
+
+
+names(agg.g)[1] <- "Taxonomy"
+
+# metaT
+agg.t = aggregate(t[,3:7],
+                by = list(t$Taxonomy),
+                FUN = sum)
+
+
+names(agg.t)[1] <- "Taxonomy"
+
+# merge everything to this new coverage threshold
+df <- merge(cov2, agg.g, by="Taxonomy")
+df2 <- merge(cov2, agg.t, by="Taxonomy")
+df3 <- merge(df, df2, by="Taxonomy", all=TRUE)
+
+# rearrange columns
+df4 <- df3[, c("Taxonomy", "total_length.x",colnames(df3)[str_detect(colnames(df3), "meta")])]
+
+# isolate taxonomy and length
+length <- cov[, c("Taxonomy", "total_length")]
+
+# calculate rpkm
+rpkm <- df4
+rpkm_fun <- function(x) x / ( (rpkm$total_length.x / 1000) * (sum(x) / 1000000) )
+rpkm[, 3:12] <- apply(rpkm[, 3:12], 2, rpkm_fun)
+
+# check rpkm worked
+apply(rpkm[, 3:12], 2, sum)
+
+# make long form
+long <- pivot_longer(data = rpkm, 
+                          cols = c(3:12), 
+                          names_to = "sample", 
+                          values_to = "rpkm")
+
+ # aggregate by taxonomy and sample
+agg = aggregate(long$rpkm,
+                by = list(long$Taxonomy, long$sample),
+                FUN = sum)
+
+# rename first column
+names(agg)[1] <- "Taxonomy"
+names(agg)[2] <- "full_name"
+names(agg)[3] <- "rpkm"
+
+# add metadata
+agg$sample <- agg$full_name
+
+agg <- agg %>% separate(full_name, 
+                c("omics","Saureus_load"))
+# set up group
+agg$group <- factor(agg$Saureus_load, levels=c("neg","low","med","high","SA"))
+
+# filter to rpkm > 1
+p <- agg %>% filter(agg$rpkm > 1)
+
+# rename propionibacterium humerusii to Cutibacterium acnes
+p$Taxonomy <- sub("Propionibacterium humerusii", "Cutibacterium acnes", p$Taxonomy)
+
+# omit SA only group
+p <- p %>% filter(!grepl('SA',Saureus_load))
+
+
+```
+
+
+Plot
+```{r, fig.height = 4.5, fig.width=10}
+m <- ggplot(p, aes(x = group, y = rpkm, fill = Taxonomy)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.8) +
+  labs(y = "RPKM") +
+  facet_wrap(~omics, scales="free", nc=5) +
+  theme(text = element_text(size = 30),
+        legend.text=element_text(size=30),
+        plot.title = element_text(
+          hjust = 0, 
+          size = 30, 
+          face="bold", 
+          margin=margin(10,0,10,0))) +
+  xlab(" ")+ 
+  theme_light() +
+  theme(legend.position="right") +
+  scale_fill_manual(values=c("grey", "grey", "grey","grey","grey","#009E73","grey",
+                              "grey","grey","grey","#F0E442","grey","grey","grey",
+                             "grey","#E69F00","#000000","grey","grey","#CC79A7",
+                             "grey","grey","#0072B2","grey","grey","grey",
+                             "#D55E00","grey","grey","grey"))
+
+m
+```
+
+
+Figure 5E and Supp Fig 1
+Import and manage data 
+```{r}
+# import data
+counts2 <-readr::read_tsv("/Users/data/SkinCom_manuscript_regression_rawdata_RPKMnorm_w.tsv")
+
+# view
+counts2
+```
+
+
+Plot
+```{r}
+a <- ggplot(counts2, aes(x = Community , y = SLS_0.05_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLS, 0.05%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+b <- ggplot(counts2, aes(x = Community , y = SLS_0.5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLS, 0.5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+c <- ggplot(counts2, aes(x = Community , y = SLS_5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLS, 5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+d <- ggplot(counts2, aes(x = Community , y = SLES_0.05_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLES, 0.05%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+e <- ggplot(counts2, aes(x = Community , y = SLES_0.5_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLES, 0.5%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+f <- ggplot(counts2, aes(x = Community , y = SLES_0.5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLES, 0.5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+g <- ggplot(counts2, aes(x = Community , y = SLES_5_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLES, 5%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+h <- ggplot(counts2, aes(x = Community , y = SLES_5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "SLES, 5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+
+i <-  ggplot(counts2, aes(x = Community , y = RL_0.05_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "RL, 0.05%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+j <- ggplot(counts2, aes(x = Community , y = RL_0.5_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "RL, 0.5%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+k <- ggplot(counts2, aes(x = Community , y = RL_0.5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "RL, 0.5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+l <- ggplot(counts2, aes(x = Community , y = RL_5_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "RL, 5%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+m <- ggplot(counts2, aes(x = Community , y = RL_5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "RL, 5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+n <- ggplot(counts2, aes(x = Community , y = Crt_0.01_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "Crt, 0.01%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+o <- ggplot(counts2, aes(x = Community , y = Crt_0.1_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "Crt, 0.1%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+p <- ggplot(counts2, aes(x = Community , y = Crt_0.1_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "Crt, 0.1%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+q <- ggplot(counts2, aes(x = Community , y = Crt_0.5_24)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "Crt, 0.5%, 24hrs")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+  
+r <- ggplot(counts2, aes(x = Community , y = Crt_1_0)) +
+geom_point(color='black', shape=21, size=4, aes(fill=Taxonomy)) +
+stat_smooth(method = "lm", se=TRUE) +
+# stat_regline_equation(label.x.npc = "center") + 
+labs(title = "Crt, 1%, 0hr")+
+scale_y_log10() + scale_x_log10()+
+  theme(legend.position="right") +
+  theme_light() +
+  xlab("No compound (RPKM)")+ 
+  ylab("SLS (RPKM)")+ 
+  scale_fill_manual(values=cbp,
+                      "Taxonomy",
+                      labels = c(expression(italic("Corynebacterium afermentans")), 
+                                 expression(italic("Cutibacterium acnes")),
+                                 expression(italic("Micrococcus luteus")),
+                                 expression(italic("Staphylococcus aureus")),
+                                 expression(italic("Staphylococcus capitis")), 
+                                 expression(italic("Staphylococcus epidermidis")),
+                                 expression(italic("Staphylococcus hominis")),
+                                 expression(italic("Staphylococcus warneri")),
+                                 expression(italic("Streptococcus mitis")))) +
+                                 theme(legend.text.align = 0) 
+
+
+# view
+a
+b
+c
+d
+e
+f
+g
+h
+i
+j
+k
+l
+m
+n
+o
+p
+q
+r
+```
+
+
+Supp Fig 3
+Import and manage data 
+```{r}
+# import data
+df<-readr::read_tsv("/Users/data/evonik_all_taxonomy.tsv")
+
+
+# dataframe management
+# split names
+colnames(df)[2:ncol(df)] <- str_split(colnames(df)[2:ncol(df)], "_S", simplify = TRUE)[,1]
+# rename column
+names(df)[1] <- "Taxonomy"
+# filter to only include "post" from the df
+df <- df[, c("Taxonomy", colnames(df)[str_detect(colnames(df), "post")])]
+# delete "metaG"
+colnames(df)[2: (ncol(df))] <- str_replace(colnames(df)[2: (ncol(df))], "metaG_", "")
+# rename
+colnames(df)[2: (ncol(df))] <- str_replace(colnames(df)[2: (ncol(df))], "post", "day7")
+# change pre to day0
+colnames(both)[2: (ncol(both))] <- str_replace(colnames(both)[2: (ncol(both))], "pre", "day0")
+colnames(both)[2: (ncol(both))] <- str_replace(colnames(both)[2: (ncol(both))], "post", "day4")
+# bind df and both by Taxonomy
+pca <- merge(both,df,all.x=TRUE)
+# sort columns
+pca <- pca[, c("Taxonomy", "total_length", colnames(pca)[str_detect(colnames(pca), "Day")])]
+
+
+# calculate rpkm
+# rename
+rpkm <- pca
+# set up function
+rpkm_fun <- function(x) x / ( (rpkm$total_length / 1000) * (sum(x) / 1000000) )
+rpkm[, 3:65] <- apply(rpkm[, 3:65], 2, rpkm_fun)
+# check
+apply(rpkm[, 3:65], 2, sum)
+
+
+# aggregate by taxonomy
+rpkm.agg <- aggregate(rpkm[, c(3:65)], by = list(rpkm$Taxonomy), sum)
+# rename first column
+colnames(rpkm.agg)[1] = "Taxonomy"
+
+
+# select numbers to perform pca
+rpkm.agg <- rpkm.agg[, c(2:64)]
+rpkm.agg
+# make string
+str(rpkm.agg)
+# transpose string
+rpkm.agg.transposed <- as.data.frame(t(rpkm.agg))
+rpkm.agg.transposed
+# move index to first column
+rpkm.agg.transposed <- cbind(newColName = rownames(rpkm.agg.transposed), rpkm.agg.transposed)
+rownames(rpkm.agg.transposed) <- 1:nrow(rpkm.agg.transposed)
+# rename first column name 
+colnames(rpkm.agg.transposed)[1] = "Sample"
+# copy Sample column
+rpkm.agg.transposed$full_name <- rpkm.agg.transposed$Sample
+# separate by underscore
+rpkm.agg.transposed <- rpkm.agg.transposed %>% separate(Sample, 
+                c("day", "side","subject"))
+# move descriptions to left most
+rpkm.agg.transposed <- rpkm.agg.transposed[, c(1:3,19,4:18)]
+```
+
+
+Plot PCA
+```{r}
+# load packages
+library(FactoMineR) 
+library(factoextra)
+
+# select data
+rpkm.agg.transposed <- rpkm.agg.transposed %>% select(day,side,subject,full_name,everything())
+
+# calculate
+rpkm.agg.transposed.res <- PCA(log(rpkm.agg.transposed[, 5:19]+0.001),
+           quali.sup = 1:4)
+
+# add a column for cohort
+
+ff = function(x, patterns, replacements = patterns, fill = NA, ...)
+{
+    stopifnot(length(patterns) == length(replacements))
+
+    ans = rep_len(as.character(fill), length(x))    
+    empty = seq_along(x)
+
+    for(i in seq_along(patterns)) {
+        greps = grepl(patterns[[i]], x[empty], ...)
+        ans[empty[greps]] = replacements[[i]]  
+        empty = empty[!greps]
+    }
+
+    return(ans)
+}
+
+# add columns for more metadata
+rpkm.agg.transposed$cohort <- ff(rpkm.agg.transposed$subject, c("sub3|sub4|sub5|sub6|sub7|sub8|sub9|sub11"), c("Rhamnolipid"), "SLES", ignore.case = TRUE)
+```
+
+Plot all samples
+```{r, fig.height = 6, fig.width=12}
+# plot 
+fviz_pca_ind(rpkm.agg.transposed.res,
+             habillage = as.factor(rpkm.agg.transposed$full_name),
+             title = "PCA of all samples",
+             geom = "point",
+             ellipse.level=0.95)
+```
+
+Plot by subject
+```{r, fig.height = 7, fig.width=7}
+fviz_pca_ind(rpkm.agg.transposed.res,
+             habillage = as.factor(rpkm.agg.transposed$subject),
+             title = "PCA by subject",
+             geom = "point",
+             addEllipses = FALSE, # minimizing clutter
+             ellipse.level=0.95)
+```
+
+Plot by cohort (chemicals)
+```{r, fig.height = 7, fig.width=7}
+fviz_pca_ind(rpkm.agg.transposed.res,
+             habillage = as.factor(rpkm.agg.transposed$cohort),
+             title = "PCA by cohort",
+             geom = "point",
+             addEllipses = TRUE,
+             ellipse.level=0.95)
+```
+
+
