@@ -5,6 +5,10 @@ date: '`r Sys.Date()`'
 output: html_document
 ---
 
+
+This is for making Figures 1B, 2D, 3A, 3B, 3G, 4 Figure 5E and Supp Fig 1, Supp Fig 3
+
+
 Load packages
 ```{r}
 # install packages
@@ -27,7 +31,7 @@ library(tidyverse)
 ```
 
 
-Set up colorblind-friendly olor palette
+Set up colorblind-friendly color palette
 https://www.datanovia.com/en/blog/ggplot-colors-best-tricks-you-will-love/
 ```{r}
 # The palette with grey:
@@ -283,7 +287,7 @@ p <- dflm %>% filter(dflm$RPKM > 1)
 p <- p %>% filter(!grepl('NegControl_S48',Well))
 
 # plot
-Fig3E <- ggplot(p, aes(x = Ratio, y = RPKM, fill = Taxonomy)) +
+Fig3G <- ggplot(p, aes(x = Ratio, y = RPKM, fill = Taxonomy)) +
   geom_bar(stat = "identity", position = "fill", width = 0.8) +
   labs(y = "Relative abundance (RPKM)") +
   facet_wrap(~Media, scales="free", nc=3) +
@@ -311,7 +315,7 @@ Fig3E <- ggplot(p, aes(x = Ratio, y = RPKM, fill = Taxonomy)) +
                                  theme(legend.text.align = 0) 
 
 # view
-Fig3E
+Fig3G
 ```
 
 
