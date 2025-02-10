@@ -1,1 +1,16 @@
-Please download this zip folder to see raw files
+Please download this zip folder to see raw files:
+
+Pilot1_metadata_phyloseq.tsv
+Pilot2_metadata_phyloseq.tsv
+RPKM_counts.csv
+SkinCom_manuscript_regression_rawdata_RPKMnorm_w.tsv
+bowtie2_reclass_counts_norm_organism.csv
+bowtie_counts.csv
+evonik_all_taxonomy.tsv
+growth_curve_both.csv
+invitro_skincom_JC_no_strat.tsv
+metaG_mouse_coverages.tsv
+mouse_metaG.tsv
+mouse_metaT.tsv
+phyloseq_taxa.csv
+zebra_genome_length.tsv
