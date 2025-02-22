@@ -1,0 +1,116 @@
+---
+title: "SkinCom_compounds_test_v2"
+author: "Joanna Coker (written) and Asama Lekbua (edited)"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Housekeeping
+
+## Load (or install) libraries
+
+```{r}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(phyloseq)
+library(stringr)
+
+```
+
+## Set a working directory
+
+```{r}
+setwd("../raw_data/")
+```
+
+
+# Import files
+
+## Reference table - has contig, genus, species, organism
+```{r}
+ref <- read.csv("../raw_data/phyloseq_taxa_pilot2.csv", sep = ",")
+# rename first column to Contig
+names(ref)[1] <- "Contig"
+# add a column called Taxonomy
+ref$Taxonomy <- paste(ref$Genus, ref$Species)
+```
+
+## Experimental metadata - has compound, concentration, time added, file name, sample name (unique)
+```{r}
+met <- read.csv("../raw_data/metadata.tsv", sep = "\t")
+
+```
+
+## OTU data file
+```{r}
+otu <- read.csv("../raw_data/bowtie_counts.csv", sep = ",")
+# rename first column
+names(otu)[1] <- "Contig"
+```
+
+## Genome length
+```{r}
+length <-read.delim("../raw_data/zebra_9strains_skincom_length.tsv", sep=",")
+```
+
+# Merge otu and ref 
+```{r}
+# merge otu with ref by Contig
+df <- merge(otu, ref, by="Contig")
+
+# merge taxonomy and genome length
+df2 <- merge(df, length, by="Taxonomy")
+
+# select only relevant columns to normalize 
+df3 <- df2[, c(1,3:43,47)]
+```
+
+# Calculate RPKM
+
+Divide reads by length of genome/contig in kilobases -> RPK. Then divide each RPK by sum()/1,000,000 ('per kilobase scaling factor')
+
+```{r}
+rpkm <- df3
+rpkm_fun <- function(x) x / ( (rpkm$total_length / 1000) * (sum(x) / 1000000) )
+rpkm[, 2:42] <- apply(rpkm[, 2:42], 2, rpkm_fun)
+
+# Replace NA with 0
+rpkm[is.na(rpkm)] <- 0
+
+# Checck rpkm norm worked
+apply(rpkm[, 2:42], 2, sum)
+```
+# Merge with metadata
+
+```{r}
+# make long form
+long <- pivot_longer(data = rpkm, 
+                           cols = c(2:42), 
+                           names_to = "ID", 
+                           values_to = "Reads")
+
+# simplify names
+long$Well <- str_split(long$ID, "_", simplify = TRUE)[,1]
+long$Sample <- str_split(long$ID, "_", simplify = TRUE)[,2]
+long$Lane <- str_split(long$ID, "_", simplify = TRUE)[,3]
+
+
+wdf <- merge(long, met, by="Sample")
+
+```
+
+# Export RPKM-normalized table
+
+```{r}
+write.csv(wdf, "../raw_data/SkinCom_compounds_test_RPKM.csv", row.names=FALSE)
+
+### This data was used to generate RPKM plots (code for plots available in skincom_scripts_alekbua_github.Rmd)
+```
+
+
+```{r}
+
+```
+
+
